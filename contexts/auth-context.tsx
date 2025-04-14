@@ -23,22 +23,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // 현재 로그인한 사용자 확인
     const checkCurrentUser = async () => {
       try {
-        const { data: sessionData } = await supabase.auth.getSession()
+        setIsLoading(true)
+        // 로컬 스토리지에서 세션 확인
+        const sessionData = localStorage.getItem("session")
 
-        if (sessionData?.session) {
-          // 사용자 정보 가져오기
-          const { data: userData } = await supabase
-            .from("users")
-            .select("id, username, name")
-            .eq("email", sessionData.session.user.email)
-            .single()
-
-          if (userData) {
+        if (sessionData) {
+          try {
+            const userData = JSON.parse(sessionData)
             setUser({
-              userId: userData.id,
+              userId: userData.userId,
               username: userData.username,
               name: userData.name,
             })
+          } catch (error) {
+            console.error("Failed to parse session data:", error)
+            localStorage.removeItem("session") // 잘못된 세션 데이터 삭제
           }
         }
       } catch (error) {
@@ -54,12 +53,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const login = async (username: string, password: string) => {
     try {
       // 사용자 정보 확인
-      const { data: userData } = await supabase
+      const { data: userData, error } = await supabase
         .from("users")
         .select("id, username, name, email")
         .eq("username", username)
         .eq("id", password) // 비밀번호는 전화번호 마지막 4자리(id)
         .single()
+
+      if (error) {
+        console.error("Login query error:", error)
+        return false
+      }
 
       if (userData) {
         // 세션 생성 (Supabase Auth를 사용하지 않고 자체 세션 관리)

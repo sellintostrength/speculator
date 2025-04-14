@@ -13,7 +13,7 @@ export default function Header() {
   const isAdmin = user && adminIds.includes(user.userId)
 
   return (
-    <header className="border-b">
+    <header className="border-b bg-white">
       <div className="container mx-auto py-4 flex items-center justify-between">
         <Link href="/" className="text-xl font-bold">
           2025년 Let's go!!

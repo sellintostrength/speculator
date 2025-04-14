@@ -297,7 +297,7 @@ export default function DailyNoteForm({ userId, year, month, day, isReadOnly = f
     <>
       <Card className="w-full">
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>투기 노트</CardTitle>
+          
           {isReadOnly && (
             <div className="flex items-center text-yellow-600">
               <LockIcon className="h-4 w-4 mr-2" />
@@ -342,8 +342,6 @@ export default function DailyNoteForm({ userId, year, month, day, isReadOnly = f
                       ? "text-green-600 border-green-300"
                       : Number.parseFloat(note.profitAmount) < 0
                         ? "text-red-600 border-red-300"
-                        : "border-input  < 0
-                        ? "text-red-600 border-red-300"
                         : "border-input"
                   }`}
                   value={note.profitAmount}
@@ -358,10 +356,10 @@ export default function DailyNoteForm({ userId, year, month, day, isReadOnly = f
             </div>
           </div>
           <div>
-            <h3 className=\"text-lg font-medium mb-2">일지</h3>
+            <h3 className="text-lg font-medium mb-2">일지</h3>
             <Textarea
               ref={textareaRef}
-              placeholder="시장, 매매근거, 심리 등을 기록하세요"리 등을 기록하세요"
+              placeholder="시장, 매매근거, 심리 등을 기록하세요"
               className="min-h-[200px]"
               value={note.text}
               onChange={(e) => setNote((prev) => ({ ...prev, text: e.target.value }))}
