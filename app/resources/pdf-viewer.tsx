@@ -23,7 +23,7 @@ import {
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
 
 interface PdfViewerProps {
-  pdfData: string
+  pdfData: string // URL 또는 base64 데이터
   fileName: string
 }
 
@@ -79,12 +79,7 @@ export default function PdfViewer({ pdfData, fileName }: PdfViewerProps) {
   }
 
   function handleDownload() {
-    const link = document.createElement("a")
-    link.href = pdfData
-    link.download = fileName + ".pdf"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    window.open(pdfData, "_blank")
   }
 
   return (

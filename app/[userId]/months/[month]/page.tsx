@@ -3,13 +3,13 @@
 import Link from "next/link"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft } from "lucide-react"
+import { ChevronLeft, Loader2 } from "lucide-react"
 import MonthlySummary from "./monthly-summary"
 import Header from "@/components/header"
 import { useAuth } from "@/contexts/auth-context"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { getUserById } from "@/lib/auth"
+import { createClientSupabaseClient } from "@/lib/supabase"
 
 interface MonthPageProps {
   params: {
@@ -18,17 +18,10 @@ interface MonthPageProps {
   }
 }
 
-interface Note {
-  text: string
-  images: string[]
-  returnRate: string
-  profitAmount: string
-}
-
 interface DaySummary {
   day: number
-  returnRate: string
-  profitAmount: string
+  returnRate: string | null
+  profitAmount: string | null
   hasData: boolean
 }
 
@@ -39,6 +32,8 @@ export default function MonthPage({ params }: MonthPageProps) {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const [daySummaries, setDaySummaries] = useState<DaySummary[]>([])
+  const [isDataLoading, setIsDataLoading] = useState(true)
+  const supabase = createClientSupabaseClient()
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -48,47 +43,80 @@ export default function MonthPage({ params }: MonthPageProps) {
 
   // 사용자 정보 가져오기
   useEffect(() => {
-    const userInfo = getUserById(userId)
-    if (userInfo) {
-      setUserName(userInfo.name)
-    }
-  }, [userId])
+    const fetchUserInfo = async () => {
+      try {
+        const { data, error } = await supabase.from("users").select("name").eq("id", userId).single()
 
-  useEffect(() => {
-    // 해당 월의 일수 계산
-    const daysInMonth = new Date(Number.parseInt(year), Number.parseInt(month), 0).getDate()
-    const summaries: DaySummary[] = []
-
-    // 모든 일자의 데이터를 확인
-    for (let day = 1; day <= daysInMonth; day++) {
-      const key = `note-${userId}-${year}-${month}-${day}`
-      const savedNote = localStorage.getItem(key)
-      let summary: DaySummary = {
-        day,
-        returnRate: "",
-        profitAmount: "",
-        hasData: false,
-      }
-
-      if (savedNote) {
-        try {
-          const parsedNote = JSON.parse(savedNote) as Note
-          summary = {
-            day,
-            returnRate: parsedNote.returnRate || "",
-            profitAmount: parsedNote.profitAmount || "",
-            hasData: !!(parsedNote.returnRate || parsedNote.profitAmount),
-          }
-        } catch (error) {
-          console.error("Failed to parse saved note:", error)
+        if (error) {
+          console.error("Failed to fetch user info:", error)
+          return
         }
-      }
 
-      summaries.push(summary)
+        if (data) {
+          setUserName(data.name)
+        }
+      } catch (error) {
+        console.error("Error fetching user info:", error)
+      }
     }
 
-    setDaySummaries(summaries)
-  }, [userId, year, month])
+    fetchUserInfo()
+  }, [userId, supabase])
+
+  // 월별 데이터 가져오기
+  useEffect(() => {
+    const fetchMonthData = async () => {
+      try {
+        setIsDataLoading(true)
+
+        // 해당 월의 일수 계산
+        const daysInMonth = new Date(Number.parseInt(year), Number.parseInt(month), 0).getDate()
+        const summaries: DaySummary[] = Array.from({ length: daysInMonth }, (_, i) => ({
+          day: i + 1,
+          returnRate: null,
+          profitAmount: null,
+          hasData: false,
+        }))
+
+        // 해당 월의 모든 노트 데이터 가져오기
+        const { data, error } = await supabase
+          .from("investment_notes")
+          .select("day, return_rate, profit_amount")
+          .eq("user_id", userId)
+          .eq("year", Number.parseInt(year))
+          .eq("month", Number.parseInt(month))
+
+        if (error) {
+          console.error("Failed to fetch month data:", error)
+          return
+        }
+
+        if (data) {
+          // 데이터로 summaries 업데이트
+          data.forEach((note) => {
+            if (note.day >= 1 && note.day <= daysInMonth) {
+              summaries[note.day - 1] = {
+                day: note.day,
+                returnRate: note.return_rate !== null ? note.return_rate.toString() : null,
+                profitAmount: note.profit_amount !== null ? note.profit_amount.toString() : null,
+                hasData: note.return_rate !== null || note.profit_amount !== null,
+              }
+            }
+          })
+        }
+
+        setDaySummaries(summaries)
+      } catch (error) {
+        console.error("Error fetching month data:", error)
+      } finally {
+        setIsDataLoading(false)
+      }
+    }
+
+    if (user) {
+      fetchMonthData()
+    }
+  }, [userId, year, month, user, supabase])
 
   if (isLoading) {
     return <div className="flex items-center justify-center min-h-screen">로딩 중...</div>
@@ -100,11 +128,7 @@ export default function MonthPage({ params }: MonthPageProps) {
 
   const isOwner = user.userId === userId
 
-  // 해당 월의 일수 계산
-  const daysInMonth = new Date(Number.parseInt(year), Number.parseInt(month), 0).getDate()
-  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1)
-
-  const formatCurrency = (amount: string) => {
+  const formatCurrency = (amount: string | null) => {
     if (!amount) return ""
     const value = Number.parseFloat(amount)
     return new Intl.NumberFormat("en-US", {
@@ -136,40 +160,47 @@ export default function MonthPage({ params }: MonthPageProps) {
 
         <MonthlySummary userId={userId} year="2025" month={month} />
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-4">
-          {daySummaries.map((summary) => (
-            <Card key={summary.day} className="w-full">
-              <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-lg">{summary.day}일</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-0 pb-2">
-                {summary.hasData && summary.profitAmount && (
-                  <div className="text-xs">
-                    <span
-                      className={`${
-                        Number.parseFloat(summary.profitAmount) > 0
-                          ? "text-green-600"
-                          : Number.parseFloat(summary.profitAmount) < 0
-                            ? "text-red-600"
-                            : ""
-                      }`}
-                    >
-                      {Number.parseFloat(summary.profitAmount) > 0 ? "+" : ""}
-                      {formatCurrency(summary.profitAmount)}
-                    </span>
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter className="p-4 pt-0">
-                <Link href={`/${userId}/months/${month}/${summary.day}`} className="w-full">
-                  <Button className="w-full" size="sm">
-                    기록 보기
-                  </Button>
-                </Link>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
+        {isDataLoading ? (
+          <div className="flex items-center justify-center p-10">
+            <Loader2 className="h-8 w-8 animate-spin mr-2" />
+            <p>데이터 로딩 중...</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-4">
+            {daySummaries.map((summary) => (
+              <Card key={summary.day} className="w-full">
+                <CardHeader className="p-4 pb-2">
+                  <CardTitle className="text-lg">{summary.day}일</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-0 pb-2">
+                  {summary.hasData && summary.profitAmount && (
+                    <div className="text-xs">
+                      <span
+                        className={`${
+                          Number.parseFloat(summary.profitAmount) > 0
+                            ? "text-green-600"
+                            : Number.parseFloat(summary.profitAmount) < 0
+                              ? "text-red-600"
+                              : ""
+                        }`}
+                      >
+                        {Number.parseFloat(summary.profitAmount) > 0 ? "+" : ""}
+                        {formatCurrency(summary.profitAmount)}
+                      </span>
+                    </div>
+                  )}
+                </CardContent>
+                <CardFooter className="p-4 pt-0">
+                  <Link href={`/${userId}/months/${month}/${summary.day}`} className="w-full">
+                    <Button className="w-full" size="sm">
+                      기록 보기
+                    </Button>
+                  </Link>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

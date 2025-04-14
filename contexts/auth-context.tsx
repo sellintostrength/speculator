@@ -1,8 +1,8 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
-import { getCurrentUser, loginUser, logoutUser, setupInitialUsers } from "@/lib/auth"
 import { useRouter } from "next/navigation"
+import { createClientSupabaseClient } from "@/lib/supabase"
 
 interface AuthContextType {
   user: { userId: string; username: string; name: string } | null
@@ -17,32 +17,80 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<{ userId: string; username: string; name: string } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
+  const supabase = createClientSupabaseClient()
 
   useEffect(() => {
-    // 초기 사용자 설정
-    setupInitialUsers()
-
     // 현재 로그인한 사용자 확인
-    const currentUser = getCurrentUser()
-    setUser(currentUser)
-    setIsLoading(false)
+    const checkCurrentUser = async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+
+        if (sessionData?.session) {
+          // 사용자 정보 가져오기
+          const { data: userData } = await supabase
+            .from("users")
+            .select("id, username, name")
+            .eq("email", sessionData.session.user.email)
+            .single()
+
+          if (userData) {
+            setUser({
+              userId: userData.id,
+              username: userData.username,
+              name: userData.name,
+            })
+          }
+        }
+      } catch (error) {
+        console.error("Failed to get current user:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    checkCurrentUser()
   }, [])
 
   const login = async (username: string, password: string) => {
-    const loggedInUser = loginUser(username, password)
-    if (loggedInUser) {
-      setUser({
-        userId: loggedInUser.id,
-        username: loggedInUser.username,
-        name: loggedInUser.name,
-      })
-      return true
+    try {
+      // 사용자 정보 확인
+      const { data: userData } = await supabase
+        .from("users")
+        .select("id, username, name, email")
+        .eq("username", username)
+        .eq("id", password) // 비밀번호는 전화번호 마지막 4자리(id)
+        .single()
+
+      if (userData) {
+        // 세션 생성 (Supabase Auth를 사용하지 않고 자체 세션 관리)
+        localStorage.setItem(
+          "session",
+          JSON.stringify({
+            userId: userData.id,
+            username: userData.username,
+            name: userData.name,
+            email: userData.email,
+          }),
+        )
+
+        setUser({
+          userId: userData.id,
+          username: userData.username,
+          name: userData.name,
+        })
+
+        return true
+      }
+
+      return false
+    } catch (error) {
+      console.error("Login failed:", error)
+      return false
     }
-    return false
   }
 
   const logout = () => {
-    logoutUser()
+    localStorage.removeItem("session")
     setUser(null)
     router.push("/login")
   }

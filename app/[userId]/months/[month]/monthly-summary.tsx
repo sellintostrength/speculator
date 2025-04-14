@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PlusCircle, MinusCircle, EqualIcon as Equals } from "lucide-react"
+import { createClientSupabaseClient } from "@/lib/supabase"
 
 interface MonthlySummaryProps {
   userId: string
@@ -10,65 +11,69 @@ interface MonthlySummaryProps {
   month: string
 }
 
-interface Note {
-  text: string
-  images: string[]
-  returnRate: string
-  profitAmount: string
-}
-
 export default function MonthlySummary({ userId, year, month }: MonthlySummaryProps) {
   const [totalProfit, setTotalProfit] = useState<number>(0)
   const [positiveProfit, setPositiveProfit] = useState<number>(0)
   const [negativeProfit, setNegativeProfit] = useState<number>(0)
   const [hasData, setHasData] = useState<boolean>(false)
+  const [isLoading, setIsLoading] = useState<boolean>(true)
+  const supabase = createClientSupabaseClient()
 
   useEffect(() => {
-    // 해당 월의 일수 계산
-    const daysInMonth = new Date(Number.parseInt(year), Number.parseInt(month), 0).getDate()
+    const fetchMonthlySummary = async () => {
+      try {
+        setIsLoading(true)
 
-    let totalProfitAmount = 0
-    let positiveProfitAmount = 0
-    let negativeProfitAmount = 0
-    let entriesWithProfit = 0
-    let foundData = false
+        // 해당 월의 모든 노트 데이터 가져오기
+        const { data, error } = await supabase
+          .from("investment_notes")
+          .select("profit_amount")
+          .eq("user_id", userId)
+          .eq("year", Number.parseInt(year))
+          .eq("month", Number.parseInt(month))
+          .not("profit_amount", "is", null)
 
-    // 모든 일자의 데이터를 확인
-    for (let day = 1; day <= daysInMonth; day++) {
-      const key = `note-${userId}-${year}-${month}-${day}`
-      const savedNote = localStorage.getItem(key)
-
-      if (savedNote) {
-        try {
-          const parsedNote = JSON.parse(savedNote) as Note
-
-          if (parsedNote.profitAmount) {
-            const profitAmount = Number.parseFloat(parsedNote.profitAmount)
-            totalProfitAmount += profitAmount
-
-            if (profitAmount > 0) {
-              positiveProfitAmount += profitAmount
-            } else if (profitAmount < 0) {
-              negativeProfitAmount += Math.abs(profitAmount)
-            }
-
-            entriesWithProfit++
-            foundData = true
-          }
-        } catch (error) {
-          console.error("Failed to parse saved note:", error)
+        if (error) {
+          console.error("Failed to fetch monthly data:", error)
+          return
         }
+
+        if (data && data.length > 0) {
+          let totalProfitAmount = 0
+          let positiveProfitAmount = 0
+          let negativeProfitAmount = 0
+
+          data.forEach((note) => {
+            if (note.profit_amount) {
+              const profitAmount = Number.parseFloat(note.profit_amount)
+              totalProfitAmount += profitAmount
+
+              if (profitAmount > 0) {
+                positiveProfitAmount += profitAmount
+              } else if (profitAmount < 0) {
+                negativeProfitAmount += Math.abs(profitAmount)
+              }
+            }
+          })
+
+          setTotalProfit(totalProfitAmount)
+          setPositiveProfit(positiveProfitAmount)
+          setNegativeProfit(negativeProfitAmount)
+          setHasData(true)
+        } else {
+          setHasData(false)
+        }
+      } catch (error) {
+        console.error("Error fetching monthly summary:", error)
+      } finally {
+        setIsLoading(false)
       }
     }
 
-    // 총 수익금액 설정
-    setTotalProfit(totalProfitAmount)
-    setPositiveProfit(positiveProfitAmount)
-    setNegativeProfit(negativeProfitAmount)
-    setHasData(foundData)
-  }, [userId, year, month])
+    fetchMonthlySummary()
+  }, [userId, year, month, supabase])
 
-  if (!hasData) return null
+  if (isLoading || !hasData) return null
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
