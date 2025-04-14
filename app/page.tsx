@@ -25,13 +25,12 @@ export default function HomePage() {
     }
   }, [user, isLoading, router])
 
-  // 모든 사용자 정보 가져오기
   useEffect(() => {
     try {
       const storedUsers = localStorage.getItem("users")
       if (storedUsers) {
         const parsedUsers = JSON.parse(storedUsers)
-        const userInfoList: UserInfo[] = parsedUsers.map((u: any) => ({
+        const userInfoList = parsedUsers.map((u) => ({
           id: u.id,
           name: u.name,
         }))
@@ -47,18 +46,17 @@ export default function HomePage() {
   }
 
   if (!user) {
-    return null // 로그인 페이지로 리디렉션됨
+    return null
   }
 
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
       <div className="container mx-auto py-10 px-4">
-        {/* 사용자 카드 - 한 줄에 2개씩 */}
         <div className="max-w-4xl mx-auto mb-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {users.map((userInfo) => (
-              <Card key={userInfo.id} className="w-full">
+              <Card key={userInfo.id}>
                 <CardHeader>
                   <CardTitle className="text-2xl">{userInfo.name}</CardTitle>
                 </CardHeader>
@@ -78,9 +76,8 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* 자료실 카드 - 한 줄에 1개 */}
         <div className="max-w-4xl mx-auto">
-          <Card className="w-full">
+          <Card>
             <CardHeader>
               <CardTitle className="text-2xl">자료실</CardTitle>
             </CardHeader>
