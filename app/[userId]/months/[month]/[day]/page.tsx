@@ -2,14 +2,14 @@
 
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft } from "lucide-react"
+import { ChevronLeft, Loader2 } from "lucide-react"
 import DailyNoteForm from "./daily-note-form"
 import ReturnSummary from "./return-summary"
 import Header from "@/components/header"
 import { useAuth } from "@/contexts/auth-context"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { getUserById } from "@/lib/auth"
+import { createClientSupabaseClient } from "@/lib/supabase"
 
 interface DayPageProps {
   params: {
@@ -21,10 +21,12 @@ interface DayPageProps {
 
 export default function DayPage({ params }: DayPageProps) {
   const { userId, month, day } = params
-  const [userName, setUserName] = useState<string>("사용자")
+  const [userName, setUserName] = useState<string>("")
   const year = "2025" // 고정된 년도
   const { user, isLoading } = useAuth()
   const router = useRouter()
+  const [isLoadingUser, setIsLoadingUser] = useState(true)
+  const supabase = createClientSupabaseClient()
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -34,14 +36,36 @@ export default function DayPage({ params }: DayPageProps) {
 
   // 사용자 정보 가져오기
   useEffect(() => {
-    const userInfo = getUserById(userId)
-    if (userInfo) {
-      setUserName(userInfo.name)
-    }
-  }, [userId])
+    const fetchUserInfo = async () => {
+      try {
+        setIsLoadingUser(true)
+        const { data, error } = await supabase.from("users").select("name").eq("id", userId).single()
 
-  if (isLoading) {
-    return <div className="flex items-center justify-center min-h-screen">로딩 중...</div>
+        if (error) {
+          console.error("Failed to fetch user info:", error)
+          return
+        }
+
+        if (data) {
+          setUserName(data.name)
+        }
+      } catch (error) {
+        console.error("Error fetching user info:", error)
+      } finally {
+        setIsLoadingUser(false)
+      }
+    }
+
+    fetchUserInfo()
+  }, [userId, supabase])
+
+  if (isLoading || isLoadingUser) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin mr-2" />
+        <p>로딩 중...</p>
+      </div>
+    )
   }
 
   if (!user) {

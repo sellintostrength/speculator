@@ -55,7 +55,7 @@ export default function AdminPage() {
     // 전화번호 형식 검증
     const phoneRegex = /^[0-9]{2,3}-[0-9]{3,4}-[0-9]{4}$/
     if (!phoneRegex.test(phone)) {
-      setMessage({ type: "error", text: "전화번호 형식은 010-1234-5678 형태로 입력해주세요." })
+      setMessage({ type: "error", text: "��화번호 형식은 010-1234-5678 형태로 입력해주세요." })
       return
     }
 

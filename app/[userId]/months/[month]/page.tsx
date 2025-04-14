@@ -27,12 +27,13 @@ interface DaySummary {
 
 export default function MonthPage({ params }: MonthPageProps) {
   const { userId, month } = params
-  const [userName, setUserName] = useState<string>("사용자")
+  const [userName, setUserName] = useState<string>("")
   const year = "2025" // 고정된 년도
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const [daySummaries, setDaySummaries] = useState<DaySummary[]>([])
   const [isDataLoading, setIsDataLoading] = useState(true)
+  const [isLoadingUser, setIsLoadingUser] = useState(true)
   const supabase = createClientSupabaseClient()
 
   useEffect(() => {
@@ -45,6 +46,7 @@ export default function MonthPage({ params }: MonthPageProps) {
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
+        setIsLoadingUser(true)
         const { data, error } = await supabase.from("users").select("name").eq("id", userId).single()
 
         if (error) {
@@ -57,6 +59,8 @@ export default function MonthPage({ params }: MonthPageProps) {
         }
       } catch (error) {
         console.error("Error fetching user info:", error)
+      } finally {
+        setIsLoadingUser(false)
       }
     }
 
@@ -118,8 +122,13 @@ export default function MonthPage({ params }: MonthPageProps) {
     }
   }, [userId, year, month, user, supabase])
 
-  if (isLoading) {
-    return <div className="flex items-center justify-center min-h-screen">로딩 중...</div>
+  if (isLoading || isLoadingUser) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin mr-2" />
+        <p>로딩 중...</p>
+      </div>
+    )
   }
 
   if (!user) {
