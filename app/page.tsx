@@ -1,23 +1,18 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { BookOpen, FileText } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import Header from "@/components/header"
-import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
-
-interface UserInfo {
-  id: string
-  name: string
-}
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { BookOpen, FileText } from "lucide-react"
 
 export default function HomePage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
-  const [users, setUsers] = useState<UserInfo[]>([])
+  const [users, setUsers] = useState([])
 
   useEffect(() => {
     if (!isLoading && !user) {
