@@ -2,14 +2,15 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ImagePlus, Save, Trash2, X, ZoomIn, LockIcon, Loader2 } from "lucide-react"
+import { ImagePlus, Save, Trash2, X, ZoomIn, LockIcon, Loader2, ImageIcon } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { createClientSupabaseClient } from "@/lib/supabase"
 import { v4 as uuidv4 } from "uuid"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface DailyNoteFormProps {
   userId: string
@@ -37,6 +38,8 @@ export default function DailyNoteForm({ userId, year, month, day, isReadOnly = f
   const [isImageDialogOpen, setIsImageDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const supabase = createClientSupabaseClient()
 
   // Supabase에서 노트 불러오기
@@ -164,47 +167,85 @@ export default function DailyNoteForm({ userId, year, month, day, isReadOnly = f
     }
 
     if (e.target.files && e.target.files.length > 0) {
-      try {
-        const file = e.target.files[0]
-        const fileExt = file.name.split(".").pop()
-        const fileName = `${uuidv4()}.${fileExt}`
-        const filePath = `note-images/${note.id}/${fileName}`
+      await uploadImage(e.target.files[0])
+    }
+  }
 
-        // Supabase Storage에 이미지 업로드
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from("investment-notes")
-          .upload(filePath, file)
+  // 이미지 업로드 함수
+  const uploadImage = async (file: File) => {
+    if (isReadOnly || !note.id) {
+      alert("먼저 노트를 저장해주세요.")
+      return
+    }
 
-        if (uploadError) {
-          console.error("Image upload failed:", uploadError)
-          alert("이미지 업로드에 실패했습니다.")
+    try {
+      setUploadError(null)
+
+      // 이미지 파일 확인
+      if (!file.type.startsWith("image/")) {
+        setUploadError("이미지 파일만 업로드할 수 있습니다.")
+        return
+      }
+
+      const fileExt = file.name.split(".").pop()
+      const fileName = `${uuidv4()}.${fileExt}`
+      const filePath = `note-images/${note.id}/${fileName}`
+
+      // Supabase Storage에 이미지 업로드
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("investment-notes")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+        })
+
+      if (uploadError) {
+        console.error("Image upload failed:", uploadError)
+        setUploadError("이미지 업로드에 실패했습니다.")
+        return
+      }
+
+      // 이미지 URL 가져오기
+      const { data: urlData } = supabase.storage.from("investment-notes").getPublicUrl(filePath)
+
+      // 이미지 정보를 데이터베이스에 저장
+      const { data: imageData, error: imageError } = await supabase
+        .from("note_images")
+        .insert({
+          note_id: note.id,
+          image_url: urlData.publicUrl,
+        })
+        .select("id")
+        .single()
+
+      if (imageError) {
+        console.error("Failed to save image info:", imageError)
+        setUploadError("이미지 정보 저장에 실패했습니다.")
+        return
+      }
+
+      // 이미지 목록 업데이트
+      setImages((prev) => [...prev, { id: imageData.id, url: urlData.publicUrl }])
+    } catch (error) {
+      console.error("Error uploading image:", error)
+      setUploadError("이미지 업로드 중 오류가 발생했습니다.")
+    }
+  }
+
+  // 클립보드에서 이미지 붙여넣기 처리
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    if (isReadOnly || !note.id) return
+
+    const items = e.clipboardData.items
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        const file = items[i].getAsFile()
+        if (file) {
+          e.preventDefault()
+          await uploadImage(file)
           return
         }
-
-        // 이미지 URL 가져오기
-        const { data: urlData } = supabase.storage.from("investment-notes").getPublicUrl(filePath)
-
-        // 이미지 정보를 데이터베이스에 저장
-        const { data: imageData, error: imageError } = await supabase
-          .from("note_images")
-          .insert({
-            note_id: note.id,
-            image_url: urlData.publicUrl,
-          })
-          .select("id")
-          .single()
-
-        if (imageError) {
-          console.error("Failed to save image info:", imageError)
-          alert("이미지 정보 저장에 실패했습니다.")
-          return
-        }
-
-        // 이미지 목록 업데이트
-        setImages((prev) => [...prev, { id: imageData.id, url: urlData.publicUrl }])
-      } catch (error) {
-        console.error("Error uploading image:", error)
-        alert("이미지 업로드 중 오류가 발생했습니다.")
       }
     }
   }
@@ -301,6 +342,8 @@ export default function DailyNoteForm({ userId, year, month, day, isReadOnly = f
                       ? "text-green-600 border-green-300"
                       : Number.parseFloat(note.profitAmount) < 0
                         ? "text-red-600 border-red-300"
+                        : "border-input  < 0
+                        ? "text-red-600 border-red-300"
                         : "border-input"
                   }`}
                   value={note.profitAmount}
@@ -315,15 +358,23 @@ export default function DailyNoteForm({ userId, year, month, day, isReadOnly = f
             </div>
           </div>
           <div>
-            <h3 className="text-lg font-medium mb-2">일지</h3>
+            <h3 className=\"text-lg font-medium mb-2">일지</h3>
             <Textarea
-              placeholder="시장, 매매근거, 심리 등을 기록하세요"
+              ref={textareaRef}
+              placeholder="시장, 매매근거, 심리 등을 기록하세요"리 등을 기록하세요"
               className="min-h-[200px]"
               value={note.text}
               onChange={(e) => setNote((prev) => ({ ...prev, text: e.target.value }))}
               disabled={isReadOnly}
               readOnly={isReadOnly}
+              onPaste={handlePaste}
             />
+            {!isReadOnly && (
+              <p className="text-xs text-muted-foreground mt-1">
+                <ImageIcon className="h-3 w-3 inline mr-1" />
+                이미지는 Ctrl+V로 붙여넣기 가능합니다.
+              </p>
+            )}
           </div>
 
           <div>
@@ -357,6 +408,12 @@ export default function DailyNoteForm({ userId, year, month, day, isReadOnly = f
                 </div>
               )}
             </div>
+
+            {uploadError && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertDescription>{uploadError}</AlertDescription>
+              </Alert>
+            )}
 
             {images.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-4">

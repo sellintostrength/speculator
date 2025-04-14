@@ -42,6 +42,7 @@ export default function ResourceLibrary() {
   const [isLoading, setIsLoading] = useState(true)
   const [viewingResource, setViewingResource] = useState<ResourceFile | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const supabase = createClientSupabaseClient()
   const { user } = useAuth()
 
@@ -100,8 +101,9 @@ export default function ResourceLibrary() {
           ...prev,
           file,
         }))
+        setUploadError(null)
       } else {
-        alert("PDF 파일만 업로드 가능합니다.")
+        setUploadError("PDF 파일만 업로드 가능합니다.")
       }
     }
   }
@@ -109,11 +111,12 @@ export default function ResourceLibrary() {
   // 파일 업로드 처리
   const handleUpload = async () => {
     if (!newResource.file || !newResource.name || !user) {
-      alert("파일과 이름을 입력해주세요.")
+      setUploadError("파일과 이름을 입력해주세요.")
       return
     }
 
     setIsUploading(true)
+    setUploadError(null)
 
     try {
       const file = newResource.file
@@ -121,19 +124,29 @@ export default function ResourceLibrary() {
       const fileName = `${uuidv4()}.${fileExt}`
       const filePath = `resources/${fileName}`
 
+      console.log("Uploading file to path:", filePath)
+
       // Supabase Storage에 파일 업로드
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("investment-notes")
-        .upload(filePath, file)
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: "application/pdf",
+        })
 
       if (uploadError) {
         console.error("File upload failed:", uploadError)
-        alert("파일 업로드에 실패했습니다.")
+        setUploadError(`파일 업로드에 실패했습니다: ${uploadError.message}`)
         return
       }
 
+      console.log("Upload successful:", uploadData)
+
       // 파일 URL 가져오기
       const { data: urlData } = supabase.storage.from("investment-notes").getPublicUrl(filePath)
+
+      console.log("File URL:", urlData.publicUrl)
 
       // 자료 정보를 데이터베이스에 저장
       const { data: resourceData, error: resourceError } = await supabase
@@ -151,9 +164,11 @@ export default function ResourceLibrary() {
 
       if (resourceError) {
         console.error("Failed to save resource info:", resourceError)
-        alert("자료 정보 저장에 실패했습니다.")
+        setUploadError(`자료 정보 저장에 실패했습니다: ${resourceError.message}`)
         return
       }
+
+      console.log("Resource saved:", resourceData)
 
       // 새로운 자료 목록 가져오기
       const { data: updatedResources, error: fetchError } = await supabase
@@ -197,7 +212,7 @@ export default function ResourceLibrary() {
       alert("자료가 성공적으로 업로드되었습니다.")
     } catch (error) {
       console.error("Error uploading file:", error)
-      alert("파일 업로드 중 오류가 발생했습니다.")
+      setUploadError(`파일 업로드 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setIsUploading(false)
     }
@@ -339,6 +354,12 @@ export default function ResourceLibrary() {
               <CardDescription>투자 관련 PDF 자료를 업로드하고 관리하세요.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {uploadError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+                  {uploadError}
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="resource-name">자료 이름</Label>
                 <Input
