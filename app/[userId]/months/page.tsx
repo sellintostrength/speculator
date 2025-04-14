@@ -16,9 +16,9 @@ interface MonthsPageProps {
   }
 }
 
-export default function MonthsPage({ params }: MonthsPageProps) {
+export default function MonthsPage({ params }) {
   const { userId } = params
-  const [userName, setUserName] = useState<string>("사용자")
+  const [userName, setUserName] = useState("사용자")
   const { user, isLoading } = useAuth()
   const router = useRouter()
 
@@ -81,10 +81,11 @@ export default function MonthsPage({ params }: MonthsPageProps) {
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
           {months.map((month) => (
-            <Card key={month.number} className="w-full">
+            <Card key={month.number}>
               <CardHeader>
                 <CardTitle className="text-xl">{month.name}</CardTitle>
-
+              </CardHeader>
+              <CardFooter>
                 <Link href={`/${userId}/months/${month.number}`} className="w-full">
                   <Button className="w-full">보기</Button>
                 </Link>
